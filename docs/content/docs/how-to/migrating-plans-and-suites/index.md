@@ -204,7 +204,7 @@ The important bits:
         "Project": "migrationSource1",
        "Authentication": {
           "AuthenticationMode": "AccessToken",
-          "AccessToken": "ouiasdhusahfkahfksdhksdhvksbdlsdvnlsdvsld"
+          "AccessToken": "** removed as a secret ***"
         }
       },
       "Target": {
@@ -220,7 +220,7 @@ The important bits:
     },
     "Processors": [
       {
-        "ProcessorType": "** removed as a secret ***",
+        "ProcessorType": "TfsTestPlansAndSuitesMigrationProcessor",
         "Enabled": true,
         "OnlyElementsWithTag": "",
         "TestPlanQuery": null,
