@@ -10,6 +10,10 @@ using MigrationTools.Tools.Interfaces;
 
 namespace MigrationTools.Tools
 {
+    /// <summary>
+    /// This tool checks if the work item types in the source system have corresponding types in the target system,
+    /// and validates their fields and mappings.
+    /// </summary>
     public class TfsWorkItemTypeValidatorTool : Tool<TfsWorkItemTypeValidatorToolOptions>
     {
         private readonly IWorkItemTypeMappingTool _witMappingTool;
@@ -23,13 +27,57 @@ namespace MigrationTools.Tools
             : base(options, services, logger, telemetry)
         {
             _witMappingTool = witMappingTool ?? throw new ArgumentNullException(nameof(witMappingTool));
-            Options.Normalize();
         }
 
-        public bool ValidateWorkItemTypes(
+        public bool ValidateReflectedWorkItemIdField(
             List<WorkItemType> sourceWits,
             List<WorkItemType> targetWits,
             string reflectedWorkItemIdField)
+        {
+            Log.LogInformation("Validating presence of reflected work item ID field '{reflectedWorkItemIdField}'"
+                + " in target work item types.", reflectedWorkItemIdField);
+            bool isValid = true;
+            List<WorkItemType> wits = GetTargetWitsToValidate(sourceWits, targetWits);
+            foreach (WorkItemType targetWit in wits)
+            {
+                if (targetWit.FieldDefinitions.Contains(reflectedWorkItemIdField))
+                {
+                    Log.LogDebug("  '{targetWit}' contains reflected work item ID field '{fieldName}'.",
+                        targetWit.Name, reflectedWorkItemIdField);
+                }
+                else
+                {
+                    Log.LogError("  '{targetWit}' does not contain reflected work item ID field '{fieldName}'.",
+                        targetWit.Name, reflectedWorkItemIdField);
+                    isValid = false;
+                }
+            }
+            LogReflectedWorkItemIdValidationResult(isValid, reflectedWorkItemIdField);
+            return isValid;
+        }
+
+        private List<WorkItemType> GetTargetWitsToValidate(List<WorkItemType> sourceWits, List<WorkItemType> targetWits)
+        {
+            List<WorkItemType> targetWitsToValidate = [];
+            foreach (WorkItemType sourceWit in sourceWits)
+            {
+                string sourceWitName = sourceWit.Name;
+                if (!ShouldValidateWorkItemType(sourceWitName))
+                {
+                    continue;
+                }
+                string targetWitName = GetTargetWorkItemType(sourceWitName);
+                WorkItemType targetWit = targetWits
+                    .FirstOrDefault(wit => wit.Name.Equals(targetWitName, StringComparison.OrdinalIgnoreCase));
+                if (targetWit is not null)
+                {
+                    targetWitsToValidate.Add(targetWit);
+                }
+            }
+            return targetWitsToValidate;
+        }
+
+        public bool ValidateWorkItemTypes(List<WorkItemType> sourceWits, List<WorkItemType> targetWits)
         {
             LogWorkItemTypes(sourceWits, targetWits);
 
@@ -57,10 +105,6 @@ namespace MigrationTools.Tools
                 }
                 else
                 {
-                    if (!ValidateReflectedWorkItemIdField(targetWit, reflectedWorkItemIdField))
-                    {
-                        isValid = false;
-                    }
                     if (!ValidateWorkItemTypeFields(sourceWit, targetWit))
                     {
                         isValid = false;
@@ -69,22 +113,6 @@ namespace MigrationTools.Tools
             }
             LogValidationResult(isValid);
             return isValid;
-        }
-
-        private bool ValidateReflectedWorkItemIdField(WorkItemType targetWit, string reflectedWorkItemIdField)
-        {
-            if (targetWit.FieldDefinitions.Contains(reflectedWorkItemIdField))
-            {
-                Log.LogDebug("  '{targetWit}' contains reflected work item ID field '{fieldName}'.",
-                    targetWit.Name, reflectedWorkItemIdField);
-            }
-            else
-            {
-                Log.LogWarning("  '{targetWit}' does not contain reflected work item ID field '{fieldName}'.",
-                    targetWit.Name, reflectedWorkItemIdField);
-                return false;
-            }
-            return true;
         }
 
         private bool ValidateWorkItemTypeFields(WorkItemType sourceWit, WorkItemType targetWit)
@@ -185,7 +213,7 @@ namespace MigrationTools.Tools
                     + " source = '{sourceFieldAllowedValueType}', target = '{targetFieldAllowedValueType}'.",
                     sourceField.ReferenceName, targetField.ReferenceName, sourceValueType, targetValueType);
             }
-            if (!AllowedValuesAreSame(sourceAllowedValues, targetAllowedValues))
+            if (!DoesTargetContainsAllSourceValues(sourceAllowedValues, targetAllowedValues))
             {
                 isValid = false;
                 Log.Log(logLevel,
@@ -200,21 +228,9 @@ namespace MigrationTools.Tools
             return isValid;
         }
 
-        private bool AllowedValuesAreSame(List<string> sourceAllowedValues, List<string> targetAllowedValues)
-        {
-            if (sourceAllowedValues.Count != targetAllowedValues.Count)
-            {
-                return false;
-            }
-            foreach (string sourceValue in sourceAllowedValues)
-            {
-                if (!targetAllowedValues.Contains(sourceValue, StringComparer.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
+        private bool DoesTargetContainsAllSourceValues(List<string> sourceAllowedValues, List<string> targetAllowedValues) =>
+            sourceAllowedValues.Except(targetAllowedValues, StringComparer.OrdinalIgnoreCase).Count() == 0;
+
 
         private (string valueType, List<string> allowedValues) GetAllowedValues(FieldDefinition field)
         {
@@ -234,6 +250,14 @@ namespace MigrationTools.Tools
             {
                 Log.LogInformation(
                     "Skipping validation of work item type '{sourceWit}' because it is not included in validation list.",
+                    workItemTypeName);
+                return false;
+            }
+            else if ((Options.ExcludeWorkItemtypes.Count > 0)
+                && Options.ExcludeWorkItemtypes.Contains(workItemTypeName, StringComparer.OrdinalIgnoreCase))
+            {
+                Log.LogInformation(
+                    "Skipping validation of work item type '{sourceWit}' because it is excluded from validation list.",
                     workItemTypeName);
                 return false;
             }
@@ -272,6 +296,21 @@ namespace MigrationTools.Tools
                 string.Join(", ", sourceWits.Select(wit => wit.Name)));
             Log.LogInformation("Target work item types are: {targetWits}.",
                 string.Join(", ", targetWits.Select(wit => wit.Name)));
+        }
+
+        private void LogReflectedWorkItemIdValidationResult(bool isValid, string reflectedWorkItemIdField)
+        {
+            if (isValid)
+            {
+                Log.LogInformation("All work item types have reflected work item ID field '{reflectedWorkItemIdField}'.",
+                    reflectedWorkItemIdField);
+                return;
+            }
+
+            const string message = "Reflected work item ID field is mandatory for work item migration."
+                + " You can configure name of this field in target TFS endpoint settings as 'ReflectedWorkItemIdField' property."
+                + " Your current configured name of the field is '{reflectedWorkItemIdField}'.";
+            Log.LogError(message, reflectedWorkItemIdField);
         }
 
         private void LogValidationResult(bool isValid)

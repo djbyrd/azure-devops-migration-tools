@@ -19,6 +19,11 @@ Watch the [Video Overview](https://youtu.be/RCJsST0xBCE) to get started in 30 mi
 2. Check that you have the required [Permissions]({{< ref "docs/setup/permissions" >}}) to run the tools.
 3. Get to grips with the [Configuration]({{< ref "docs/reference" >}}) to understand how to configure the tool. (you can skip this for now and come back to it later)
 
+
+## Validation Process
+
+> **Before you begin migration, review the [Validation Process documentation]({{< ref "docs/get-started/validation" >}}) to understand how the tools automatically check your configuration and data for common issues. This can save you significant time and help avoid common migration errors.**
+
 ## Getting Started
 
 This is going to be a crash course and I really recommend watching [What can go wrong and what can go right with a migration via Azure DevOps](https://youtu.be/3jYFD-6_kZk?si=xxvBoljBWjGAOVuv) and then [Basic Work Item Migration with the Azure DevOps Migration Tools](https://youtu.be/Qt1Ywu_KLrc?si=uEXjLS2pwe244ugV) before you get started! This will prep you for the journey ahead.
@@ -64,6 +69,52 @@ The default [TfsWorkItemMigrationProcesor]({{< ref "docs/reference/processors/tf
 6. [OPTIONAL] Modify the `WIQLQueryBit` to migrate only the work items you want. The default WIQL will migrate all open work items and revisions excluding test suites and plans
 7. Adjust the [`NodeBasePaths`]({{< ref "docs/reference/processors/workitem-tracking-processor" >}}) or leave empty to migrate all nodes
 8. From your working folder run `devopsmigration execute --config .\configuration.json`
+
+### Common Issue: Work Item Type Validation Failures
+
+> **⚠️ IMPORTANT:** The migration tools include automatic validation that runs before migration starts and can cause your migration to fail if source and target systems have different work item types or fields.
+
+The [TfsWorkItemTypeValidatorTool]({{< ref "docs/reference/tools/tfsworkitemtypevalidatortool" >}}) automatically validates that:
+
+- All source work item types exist in the target system (or have mappings configured)
+- Required fields exist in target work item types
+- Field types are compatible between source and target
+- The ReflectedWorkItemId field exists in target work item types
+
+**If validation fails**, the migration will stop immediately with detailed error messages. Here's how to resolve common validation issues:
+
+**Missing Work Item Types:**
+
+```text
+Work item type 'Risk' does not exist in target system.
+```
+
+- **Solution 1:** Create the missing work item type in your target system
+- **Solution 2:** Configure a work item type mapping to map 'Risk' to an existing type like 'Issue'
+- **Solution 3:** Exclude the work item type from your migration query
+
+**Missing ReflectedWorkItemId Field:**
+
+```text
+'User Story' does not contain reflected work item ID field 'Custom.ReflectedWorkItemId'.
+```
+
+- **Solution:** Add the custom field to ALL work item types in your target project (see [ReflectedWorkItemId setup]({{< ref "docs/setup/reflected-workitem-id" >}}))
+
+**Missing Custom Fields:**
+
+```text
+Missing field 'Microsoft.VSTS.Common.CustomField' in 'User Story'.
+```
+
+- **Solution 1:** Add the missing field to the target work item type
+- **Solution 2:** Configure field mapping to map to an existing field
+- **Solution 3:** Exclude the field from validation if it's not needed
+
+
+For a complete overview of the validation process—including both pre-migration and pre-data-load validation steps—see the [Validation Process documentation]({{< ref "docs/get-started/validation" >}}).
+
+For detailed troubleshooting and configuration options, see the [TfsWorkItemTypeValidatorTool documentation]({{< ref "docs/reference/tools/tfsworkitemtypevalidatortool" >}}).
 
 **Remember:** If you want a processor to run, its `Enabled` attribute must be set to `true`.
 

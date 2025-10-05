@@ -249,23 +249,30 @@ namespace MigrationTools.Processors
 
         private void ValidateWorkItemTypes()
         {
+            Log.LogInformation("[ValidateWorkItemTypes]");
+            Log.LogInformation("------------------------------------");
+            Log.LogInformation("Starting Pre-Validation: Validating work item types and fields with `WorkItemTypeValidatorTool`.");
+            Log.LogInformation("Refer to https://devopsmigration.io/TfsWorkItemTypeValidatorTool/ for configuration.");
+            Log.LogInformation("------------------------------------");
+
+            var sourceWits = Source.WorkItems.Project
+                .ToProject()
+                .WorkItemTypes
+                .Cast<WorkItemType>()
+                .ToList();
+            var targetWits = Target.WorkItems.Project
+                .ToProject()
+                .WorkItemTypes
+                .Cast<WorkItemType>()
+                .ToList();
+
+            // Reflected work item ID field is mandatory for migration, so it is validated even if the validator tool is disabled.
+            bool containsReflectedWorkItemId = CommonTools.WorkItemTypeValidatorTool.ValidateReflectedWorkItemIdField(
+                sourceWits, targetWits, Target.Options.ReflectedWorkItemIdField);
+            bool validationResult = true;
             if (CommonTools.WorkItemTypeValidatorTool.Enabled)
             {
-                var sourceWits = Source.WorkItems.Project
-                    .ToProject()
-                    .WorkItemTypes
-                    .Cast<WorkItemType>()
-                    .ToList();
-                var targetWits = Target.WorkItems.Project
-                    .ToProject()
-                    .WorkItemTypes
-                    .Cast<WorkItemType>()
-                    .ToList();
-                if (!CommonTools.WorkItemTypeValidatorTool.ValidateWorkItemTypes(
-                    sourceWits, targetWits, Target.Options.ReflectedWorkItemIdField))
-                {
-                    Environment.Exit(-1);
-                }
+                validationResult = CommonTools.WorkItemTypeValidatorTool.ValidateWorkItemTypes(sourceWits, targetWits);
             }
             else
             {
@@ -275,6 +282,13 @@ namespace MigrationTools.Processors
                     + " or migration may not work at all.";
                 Log.LogWarning(msg);
             }
+            if (!containsReflectedWorkItemId || !validationResult)
+            {
+                Log.LogError("Validation of work item types failed.");
+                Environment.Exit(-1);
+            }
+            Log.LogInformation("------------------------------------");
+            Log.LogInformation("[/ValidateWorkItemTypes]");
         }
 
         private void ValidateAllUsersExistOrAreMapped(List<WorkItemData> sourceWorkItems)
@@ -361,13 +375,10 @@ namespace MigrationTools.Processors
                 activity?.Stop();
                 activity?.SetStatus(ActivityStatusCode.Ok);
                 activity?.SetTag("http.response.status_code", "200");
-                if (Options.UpdateCreatedBy)
+                if (Target.Options.ProductVersion != Endpoints.TfsProductVersion.OnPremisesClassic)
                 {
                     newwit.Fields["System.CreatedBy"].Value = currentRevisionWorkItem.ToWorkItem().Revisions[0].Fields["System.CreatedBy"].Value;
                     workItemLog.Debug("Setting 'System.CreatedBy'={SystemCreatedBy}", currentRevisionWorkItem.ToWorkItem().Revisions[0].Fields["System.CreatedBy"].Value);
-                }
-                if (Options.UpdateCreatedDate)
-                {
                     newwit.Fields["System.CreatedDate"].Value = currentRevisionWorkItem.ToWorkItem().Revisions[0].Fields["System.CreatedDate"].Value;
                     workItemLog.Debug("Setting 'System.CreatedDate'={SystemCreatedDate}", currentRevisionWorkItem.ToWorkItem().Revisions[0].Fields["System.CreatedDate"].Value);
                 }
