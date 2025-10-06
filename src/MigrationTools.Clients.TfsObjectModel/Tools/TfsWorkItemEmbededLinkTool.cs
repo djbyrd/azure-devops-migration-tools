@@ -155,21 +155,30 @@ namespace MigrationTools.Tools
                             var displayName = sourceIdentity.DisplayName;
                             Log.LogDebug("{LogTypeName}: Source identity {displayName} found for GUID {sourceGuid} on field {fieldName} on target work item {targetWorkItemId}.", LogTypeName, displayName, sourceGuid, field.Name, targetWorkItem.Id);
                             
-                            // Look up the display name in target identities
-                            var targetIdentity = FindIdentityByDisplayName(displayName, _targetTeamFoundationIdentitiesLazyCache.Value);
-                            
-                            if (targetIdentity != null)
+                            if (Options.ConvertMentionsToText)
                             {
-                                var targetGuid = targetIdentity.TeamFoundationId.ToString();
-                                var replaceValue = anchorTagMatch.Value.Replace(href, "#").Replace(version, $"data-vss-mention=\"version:2.0,{targetGuid.ToLower()}\"");
-                                field.Value = field.Value.ToString().Replace(anchorTagMatch.Value, replaceValue);
-                                Log.LogInformation("{LogTypeName}: HTML mention for user {displayName} (source GUID {sourceGuid}) was successfully replaced with target GUID {targetGuid} on field {fieldName} on target work item {targetWorkItemId}.", LogTypeName, displayName, sourceGuid, targetGuid, field.Name, targetWorkItem.Id);
+                                // Convert to plain text as requested
+                                field.Value = field.Value.ToString().Replace(anchorTagMatch.Value, $"@{displayName}");
+                                Log.LogInformation("{LogTypeName}: HTML mention for user {displayName} (source GUID {sourceGuid}) was converted to plain text on field {fieldName} on target work item {targetWorkItemId}.", LogTypeName, displayName, sourceGuid, field.Name, targetWorkItem.Id);
                             }
                             else
                             {
-                                // Replace with plain text using current display name
-                                field.Value = field.Value.ToString().Replace(anchorTagMatch.Value, $"@{displayName}");
-                                Log.LogWarning("{LogTypeName}: [SKIP] Matching target identity for user {displayName} (source GUID {sourceGuid}) was not found on field {fieldName} on target work item {targetWorkItemId}. Mention replaced with plain text: @{displayName}.", LogTypeName, displayName, sourceGuid, field.Name, targetWorkItem.Id);
+                                // Look up the display name in target identities
+                                var targetIdentity = FindIdentityByDisplayName(displayName, _targetTeamFoundationIdentitiesLazyCache.Value);
+                                
+                                if (targetIdentity != null)
+                                {
+                                    var targetGuid = targetIdentity.TeamFoundationId.ToString();
+                                    var replaceValue = anchorTagMatch.Value.Replace(href, "#").Replace(version, $"data-vss-mention=\"version:2.0,{targetGuid.ToLower()}\"");
+                                    field.Value = field.Value.ToString().Replace(anchorTagMatch.Value, replaceValue);
+                                    Log.LogInformation("{LogTypeName}: HTML mention for user {displayName} (source GUID {sourceGuid}) was successfully replaced with target GUID {targetGuid} on field {fieldName} on target work item {targetWorkItemId}.", LogTypeName, displayName, sourceGuid, targetGuid, field.Name, targetWorkItem.Id);
+                                }
+                                else
+                                {
+                                    // Replace with plain text using current display name
+                                    field.Value = field.Value.ToString().Replace(anchorTagMatch.Value, $"@{displayName}");
+                                    Log.LogWarning("{LogTypeName}: [SKIP] Matching target identity for user {displayName} (source GUID {sourceGuid}) was not found on field {fieldName} on target work item {targetWorkItemId}. Mention replaced with plain text: @{displayName}.", LogTypeName, displayName, sourceGuid, field.Name, targetWorkItem.Id);
+                                }
                             }
                         }
                         else
@@ -185,18 +194,28 @@ namespace MigrationTools.Tools
                         // No GUID found in data-vss-mention, fall back to old behavior of looking up by display name
                         var displayName = value.Substring(1);
                         Log.LogDebug("{LogTypeName}: User identity {displayName} mention traced (no GUID found) on field {fieldName} on target work item {targetWorkItemId}.", LogTypeName, displayName, field.Name, targetWorkItem.Id);
-                        var identity = FindIdentityByDisplayName(displayName, _targetTeamFoundationIdentitiesLazyCache.Value);
-                        if (identity != null)
+                        
+                        if (Options.ConvertMentionsToText)
                         {
-                            var replaceValue = anchorTagMatch.Value.Replace(href, "#").Replace(version, $"data-vss-mention=\"version:2.0,{identity.TeamFoundationId}\"");
-                            field.Value = field.Value.ToString().Replace(anchorTagMatch.Value, replaceValue);
-                            Log.LogInformation("{LogTypeName}: User identity {displayName} mention was successfully matched on field {fieldName} on target work item {targetWorkItemId}.", LogTypeName, displayName, field.Name, targetWorkItem.Id);
+                            // Convert to plain text as requested
+                            field.Value = field.Value.ToString().Replace(anchorTagMatch.Value, $"@{displayName}");
+                            Log.LogInformation("{LogTypeName}: HTML mention for user {displayName} was converted to plain text on field {fieldName} on target work item {targetWorkItemId}.", LogTypeName, displayName, field.Name, targetWorkItem.Id);
                         }
                         else
                         {
-                            // Replace with plain text
-                            field.Value = field.Value.ToString().Replace(anchorTagMatch.Value, $"@{displayName}");
-                            Log.LogWarning("{LogTypeName}: [SKIP] Matching user identity {displayName} mention was not found on field {fieldName} on target work item {targetWorkItemId}. Mention replaced with plain text: @{displayName}.", LogTypeName, displayName, field.Name, targetWorkItem.Id);
+                            var identity = FindIdentityByDisplayName(displayName, _targetTeamFoundationIdentitiesLazyCache.Value);
+                            if (identity != null)
+                            {
+                                var replaceValue = anchorTagMatch.Value.Replace(href, "#").Replace(version, $"data-vss-mention=\"version:2.0,{identity.TeamFoundationId}\"");
+                                field.Value = field.Value.ToString().Replace(anchorTagMatch.Value, replaceValue);
+                                Log.LogInformation("{LogTypeName}: User identity {displayName} mention was successfully matched on field {fieldName} on target work item {targetWorkItemId}.", LogTypeName, displayName, field.Name, targetWorkItem.Id);
+                            }
+                            else
+                            {
+                                // Replace with plain text
+                                field.Value = field.Value.ToString().Replace(anchorTagMatch.Value, $"@{displayName}");
+                                Log.LogWarning("{LogTypeName}: [SKIP] Matching user identity {displayName} mention was not found on field {fieldName} on target work item {targetWorkItemId}. Mention replaced with plain text: @{displayName}.", LogTypeName, displayName, field.Name, targetWorkItem.Id);
+                            }
                         }
                     }
                 }
@@ -239,19 +258,28 @@ namespace MigrationTools.Tools
                     var displayName = sourceIdentity.DisplayName;
                     Log.LogDebug("{LogTypeName}: Source identity {displayName} found for GUID {sourceGuid} on field {fieldName} on target work item {targetWorkItemId}.", LogTypeName, displayName, sourceGuid, fieldName, targetWorkItemId);
 
-                    var targetIdentity = FindIdentityByDisplayName(displayName, _targetTeamFoundationIdentitiesLazyCache.Value);
-
-                    if (targetIdentity != null)
+                    if (Options.ConvertMentionsToText)
                     {
-                        var targetGuid = targetIdentity.TeamFoundationId.ToString();
-                        var htmlMention = CreateHtmlMentionTag(displayName, targetGuid);
-                        fieldValue = fieldValue.Replace(mentionMatch.Value, htmlMention);
-                        Log.LogInformation("{LogTypeName}: Markdown mention @<{sourceGuid}> was successfully converted to HTML mention for user {displayName} with target GUID {targetGuid} on field {fieldName} on target work item {targetWorkItemId}.", LogTypeName, sourceGuid, displayName, targetGuid, fieldName, targetWorkItemId);
+                        // Convert to plain text as requested
+                        fieldValue = fieldValue.Replace(mentionMatch.Value, $"@{displayName}");
+                        Log.LogInformation("{LogTypeName}: Markdown mention @<{sourceGuid}> was converted to plain text for user {displayName} on field {fieldName} on target work item {targetWorkItemId}.", LogTypeName, sourceGuid, displayName, fieldName, targetWorkItemId);
                     }
                     else
                     {
-                        Log.LogWarning("{LogTypeName}: [SKIP] Matching target identity for user {displayName} (source GUID {sourceGuid}) was not found on field {fieldName} on target work item {targetWorkItemId}. Mention left as plain text: @{displayName}.", LogTypeName, displayName, sourceGuid, fieldName, targetWorkItemId);
-                        fieldValue = fieldValue.Replace(mentionMatch.Value, $"@{displayName}");
+                        var targetIdentity = FindIdentityByDisplayName(displayName, _targetTeamFoundationIdentitiesLazyCache.Value);
+
+                        if (targetIdentity != null)
+                        {
+                            var targetGuid = targetIdentity.TeamFoundationId.ToString();
+                            var htmlMention = CreateHtmlMentionTag(displayName, targetGuid);
+                            fieldValue = fieldValue.Replace(mentionMatch.Value, htmlMention);
+                            Log.LogInformation("{LogTypeName}: Markdown mention @<{sourceGuid}> was successfully converted to HTML mention for user {displayName} with target GUID {targetGuid} on field {fieldName} on target work item {targetWorkItemId}.", LogTypeName, sourceGuid, displayName, targetGuid, fieldName, targetWorkItemId);
+                        }
+                        else
+                        {
+                            Log.LogWarning("{LogTypeName}: [SKIP] Matching target identity for user {displayName} (source GUID {sourceGuid}) was not found on field {fieldName} on target work item {targetWorkItemId}. Mention left as plain text: @{displayName}.", LogTypeName, displayName, sourceGuid, fieldName, targetWorkItemId);
+                            fieldValue = fieldValue.Replace(mentionMatch.Value, $"@{displayName}");
+                        }
                     }
                 }
                 else
